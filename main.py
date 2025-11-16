@@ -36,7 +36,15 @@ def create_menu(self):
     open_action = QAction("Open", self)
     open_action.triggered.connect(self.open_file)
     file_menu.addAction(open_action)
-
+    
+    save_action = QAction("Save", self)
+    save_action.triggered.connect(self.save_file)
+    file_menu.addAction(save_action)
+    
+    save_as_action = QAction("Save As", self)
+    save_as_action.triggered.connect(self.save_file_as)
+    file_menu.addAction(save_as_action)
+    
 
 def open_file(self):
     """
@@ -50,13 +58,12 @@ def open_file(self):
     )
 
     if not file_path:
-        return  # User cancelled
+        return  
 
     encodings_to_try = ["utf-8", "utf-16", "latin-1"]
     content = None
     last_exception = None
 
-    # Try multiple encodings safely
     for enc in encodings_to_try:
         try:
             with open(file_path, "r", encoding=enc) as f:
@@ -78,6 +85,48 @@ def open_file(self):
 
     self.update_preview()
 
+def save_file(self):
+    """
+    Save current editor content into the currently opened file.
+    """
+    if not getattr(self, "current_file_path", None):
+        return self.save_file_as()
+
+    try:
+        with open(self.current_file_path, "w", encoding="utf-8") as f:
+            f.write(self.left_pane.toPlainText())
+    except Exception as e:
+        QMessageBox.critical(
+            self,
+            "Save Error",
+            f"Could not save file:\n{self.current_file_path}\n\nError: {e}"
+        )
+
+def save_file_as(self):
+    """
+    Save editor content to a new file path chosen by the user.
+    """
+    file_path, _ = QFileDialog.getSaveFileName(
+        self,
+        "Save Markdown File",
+        "",
+        "Markdown Files (*.md *.markdown);;Text Files (*.txt);;All Files (*)"
+    )
+
+    if not file_path:
+        return
+
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(self.left_pane.toPlainText())
+        self.current_file_path = file_path
+    except Exception as e:
+        QMessageBox.critical(
+            self,
+            "Save Error",
+            f"Could not save file:\n{file_path}\n\nError: {e}"
+        )
+    
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -87,6 +136,8 @@ class MainWindow(QMainWindow):
         self.resize(900, 600)
         
         self.open_file = open_file.__get__(self)
+        self.save_file = save_file.__get__(self)
+        self.save_file_as = save_file_as.__get__(self)
 
         create_menu(self)
 
