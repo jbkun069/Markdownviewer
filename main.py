@@ -5,19 +5,37 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtWebEngineWidgets import QWebEngineView  # pyright: ignore[reportMissingImports]
 import sys
+import markdown # type: ignore
+
+def convert_markdown_to_html(md_text: str) -> str:
+    """
+    Convert Markdown text to HTML using python's markdown library
+    """
+    return markdown.markdown(
+        md_text,
+        extensions=[
+            "fenced_code",
+            "tables",
+            "codehilite",
+            "toc",
+            "abbr",
+            "attr_list",
+        ]
+    )
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
        
         self.setWindowTitle("My PyQt6 QMainWindow")
-        self.resize(500, 500)
+        self.resize(900, 900)
 
         central_widget = QWidget()
         layout = QVBoxLayout()
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
         self.left_pane =  QTextEdit()
+        self.left_pane.setPlaceholderText("Write your markdown here")
         self.left_pane.textChanged.connect(self.update_preview)
         splitter.addWidget(self.left_pane)
         
@@ -35,8 +53,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
     
     def update_preview(self):
-        content = self.left_pane.toPlainText()
-        self.right_pane.setHtml(content)
+        md_text = self.left_pane.toPlainText()
+        html_content = convert_markdown_to_html(md_text)
+        self.right_pane.setHtml(html_content)
 
 def main():
     app = QApplication(sys.argv)
