@@ -1,13 +1,14 @@
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QSplitter, QTextEdit, QFileDialog, QMessageBox
+    QSplitter, QTextEdit, QFileDialog, QMessageBox,
+    QDialog, QLineEdit, QPushButton, QLabel, QHBoxLayout
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtCore import Qt, QMimeData
+from PyQt6.QtWebEngineWidgets import QWebEngineView  # type: ignore
 from PyQt6.QtGui import QAction
 import sys
 import os
-import markdown
+import markdown # type: ignore
 
 
 def convert_markdown_to_html(md_text: str) -> str:
@@ -27,12 +28,79 @@ def convert_markdown_to_html(md_text: str) -> str:
     )
 
 
+class FindReplaceDialog(QDialog):
+    def __init__(self, editor):
+        super().__init__()
+        self.editor = editor
+        self.setWindowTitle("Find / Replace")
+        self.setModal(True)
+
+        self.find_input = QLineEdit()
+        self.replace_input = QLineEdit()
+        self.find_btn = QPushButton("Find Next")
+        self.replace_btn = QPushButton("Replace")
+        self.replace_all_btn = QPushButton("Replace All")
+
+        layout = QVBoxLayout()
+        box1 = QHBoxLayout()
+        box1.addWidget(QLabel("Find:"))
+        box1.addWidget(self.find_input)
+
+        box2 = QHBoxLayout()
+        box2.addWidget(QLabel("Replace:"))
+        box2.addWidget(self.replace_input)
+
+        box3 = QHBoxLayout()
+        box3.addWidget(self.find_btn)
+        box3.addWidget(self.replace_btn)
+        box3.addWidget(self.replace_all_btn)
+
+        layout.addLayout(box1)
+        layout.addLayout(box2)
+        layout.addLayout(box3)
+
+        self.setLayout(layout)
+
+        self.find_btn.clicked.connect(self.find_next)
+        self.replace_btn.clicked.connect(self.replace_one)
+        self.replace_all_btn.clicked.connect(self.replace_all)
+
+    def find_next(self):
+        text = self.find_input.text()
+        if not text:
+            return
+        cursor = self.editor.textCursor()
+        start = cursor.position()
+        doc = self.editor.document()
+        found = doc.find(text, start)
+        if not found.isNull():
+            self.editor.setTextCursor(found)
+        else:
+            found = doc.find(text, 0)
+            if not found.isNull():
+                self.editor.setTextCursor(found)
+
+    def replace_one(self):
+        target = self.find_input.text()
+        repl = self.replace_input.text()
+        cursor = self.editor.textCursor()
+        if cursor.selectedText() == target:
+            cursor.insertText(repl)
+        self.find_next()
+
+    def replace_all(self):
+        target = self.find_input.text()
+        repl = self.replace_input.text()
+        text = self.editor.toPlainText().replace(target, repl)
+        self.editor.setPlainText(text)
+
+
 def create_menu(self):
     """
     create a simple menu bar
     """
     menubar = self.menuBar()
-    file_menu = menubar.addMenu("file")
+    file_menu = menubar.addMenu("File")
 
     open_action = QAction("Open", self)
     open_action.triggered.connect(self.open_file)
@@ -45,6 +113,11 @@ def create_menu(self):
     save_as_action = QAction("Save As", self)
     save_as_action.triggered.connect(self.save_file_as)
     file_menu.addAction(save_as_action)
+
+    edit_menu = menubar.addMenu("Edit")
+    find_action = QAction("Find / Replace", self)
+    find_action.triggered.connect(self.open_find_replace)
+    edit_menu.addAction(find_action)
 
 
 def open_file(self):
@@ -139,12 +212,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("My PyQt6 QMainWindow")
         self.resize(900, 600)
 
-        # Assign methods to self before creating the menu
         self.open_file = open_file.__get__(self)
         self.save_file = save_file.__get__(self)
         self.save_file_as = save_file_as.__get__(self)
 
-        create_menu(self)
+        create_menu(self)  
 
         self.current_file_path = None
         self.is_modified = False
@@ -167,9 +239,10 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
-        # Process command-line arguments
         if len(argv) > 1:
             self.try_open_startup_file(argv[1])
+
+        self.setAcceptDrops(True)
 
     def try_open_startup_file(self, path):
         if not os.path.exists(path):
@@ -207,6 +280,10 @@ class MainWindow(QMainWindow):
         html_content = convert_markdown_to_html(md_text)
         self.right_pane.setHtml(html_content)
 
+    def open_find_replace(self):
+        dlg = FindReplaceDialog(self.left_pane)
+        dlg.exec()
+
     def on_text_modified(self):
         if not self.is_modified:
             self.is_modified = True
@@ -221,7 +298,6 @@ class MainWindow(QMainWindow):
     def confirm_discard_changes(self):
         if not self.is_modified:
             return True
-
         reply = QMessageBox.question(
             self,
             "Unsaved Changes",
@@ -235,6 +311,18 @@ class MainWindow(QMainWindow):
             event.ignore()
         else:
             event.accept()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        path = urls[0].toLocalFile()
+        if path:
+            self.try_open_startup_file(path)
 
 
 def main():
