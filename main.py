@@ -3,12 +3,16 @@ from PyQt6.QtWidgets import (
     QSplitter, QTextEdit, QFileDialog, QMessageBox,
     QDialog, QLineEdit, QPushButton, QLabel, QHBoxLayout
 )
-from PyQt6.QtCore import Qt, QMimeData
-from PyQt6.QtWebEngineWidgets import QWebEngineView  # type: ignore
+from PyQt6.QtCore import Qt
+from PyQt6.QtWebEngineWidgets import QWebEngineView # type: ignore
 from PyQt6.QtGui import QAction
 import sys
 import os
+import json
 import markdown # type: ignore
+
+
+SESSION_FILE = "session.json"
 
 
 def convert_markdown_to_html(md_text: str) -> str:
@@ -58,7 +62,6 @@ class FindReplaceDialog(QDialog):
         layout.addLayout(box1)
         layout.addLayout(box2)
         layout.addLayout(box3)
-
         self.setLayout(layout)
 
         self.find_btn.clicked.connect(self.find_next)
@@ -81,17 +84,17 @@ class FindReplaceDialog(QDialog):
                 self.editor.setTextCursor(found)
 
     def replace_one(self):
-        target = self.find_input.text()
-        repl = self.replace_input.text()
+        t = self.find_input.text()
+        r = self.replace_input.text()
         cursor = self.editor.textCursor()
-        if cursor.selectedText() == target:
-            cursor.insertText(repl)
+        if cursor.selectedText() == t:
+            cursor.insertText(r)
         self.find_next()
 
     def replace_all(self):
-        target = self.find_input.text()
-        repl = self.replace_input.text()
-        text = self.editor.toPlainText().replace(target, repl)
+        t = self.find_input.text()
+        r = self.replace_input.text()
+        text = self.editor.toPlainText().replace(t, r)
         self.editor.setPlainText(text)
 
 
@@ -101,6 +104,10 @@ def create_menu(self):
     """
     menubar = self.menuBar()
     file_menu = menubar.addMenu("File")
+
+    new_action = QAction("New", self)
+    new_action.triggered.connect(self.new_file)
+    file_menu.addAction(new_action)
 
     open_action = QAction("Open", self)
     open_action.triggered.connect(self.open_file)
@@ -133,35 +140,9 @@ def open_file(self):
         "",
         "Markdown Files (*.md *.markdown);;Text Files (*.txt);;All Files (*)"
     )
-
     if not file_path:
         return
-
-    encodings = ["utf-8", "utf-16", "latin-1"]
-    content = None
-    err = None
-
-    for enc in encodings:
-        try:
-            with open(file_path, "r", encoding=enc) as f:
-                content = f.read()
-                break
-        except Exception as e:
-            err = e
-            continue
-
-    if content is None:
-        QMessageBox.critical(self, "File Read Error", f"Failed to read file:\n{file_path}\n\nError: {err}")
-        return
-
-    self.left_pane.blockSignals(True)
-    self.left_pane.setPlainText(content)
-    self.left_pane.blockSignals(False)
-
-    self.current_file_path = file_path
-    self.is_modified = False
-    self.update_window_title()
-    self.update_preview()
+    self.load_file_content(file_path)
 
 
 def save_file(self):
@@ -191,10 +172,8 @@ def save_file_as(self):
         "",
         "Markdown Files (*.md *.markdown);;Text Files (*.txt);;All Files (*)"
     )
-
     if not file_path:
         return
-
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(self.left_pane.toPlainText())
@@ -239,20 +218,28 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
-        if len(argv) > 1:
+        if os.path.exists(SESSION_FILE):
+            self.restore_last_session()
+        elif len(argv) > 1:
             self.try_open_startup_file(argv[1])
 
         self.setAcceptDrops(True)
 
-    def try_open_startup_file(self, path):
-        if not os.path.exists(path):
-            QMessageBox.critical(self, "File Not Found", f"The file was not found:\n{path}")
+    def new_file(self):
+        if self.is_modified and not self.confirm_discard_changes():
             return
+        self.left_pane.blockSignals(True)
+        self.left_pane.setPlainText("")
+        self.left_pane.blockSignals(False)
+        self.current_file_path = None
+        self.is_modified = False
+        self.update_window_title()
+        self.update_preview()
 
+    def load_file_content(self, path):
         encodings = ["utf-8", "utf-16", "latin-1"]
         content = None
         err = None
-
         for enc in encodings:
             try:
                 with open(path, "r", encoding=enc) as f:
@@ -261,19 +248,52 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 err = e
                 continue
-
         if content is None:
             QMessageBox.critical(self, "File Read Error", f"Failed to read file:\n{path}\n\nError: {err}")
             return
-
         self.left_pane.blockSignals(True)
         self.left_pane.setPlainText(content)
         self.left_pane.blockSignals(False)
-
         self.current_file_path = path
         self.is_modified = False
         self.update_window_title()
         self.update_preview()
+
+    def try_open_startup_file(self, path):
+        if os.path.exists(path):
+            self.load_file_content(path)
+        else:
+            QMessageBox.critical(self, "File Not Found", f"The file was not found:\n{path}")
+
+    def restore_last_session(self):
+        try:
+            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except:
+            return
+        last_path = data.get("last_file")
+        last_text = data.get("last_text")
+        if last_path and os.path.exists(last_path):
+            self.load_file_content(last_path)
+        else:
+            self.left_pane.blockSignals(True)
+            self.left_pane.setPlainText(last_text or "")
+            self.left_pane.blockSignals(False)
+            self.current_file_path = None
+            self.is_modified = False
+            self.update_window_title()
+            self.update_preview()
+
+    def save_session(self):
+        data = {
+            "last_file": self.current_file_path,
+            "last_text": self.left_pane.toPlainText() if self.current_file_path is None else ""
+        }
+        try:
+            with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except:
+            pass
 
     def update_preview(self):
         md_text = self.left_pane.toPlainText()
@@ -298,15 +318,16 @@ class MainWindow(QMainWindow):
     def confirm_discard_changes(self):
         if not self.is_modified:
             return True
-        reply = QMessageBox.question(
+        r = QMessageBox.question(
             self,
             "Unsaved Changes",
             "You have unsaved changes. Do you want to discard them?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        return reply == QMessageBox.StandardButton.Yes
+        return r == QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event):
+        self.save_session()
         if self.is_modified and not self.confirm_discard_changes():
             event.ignore()
         else:
@@ -322,7 +343,7 @@ class MainWindow(QMainWindow):
             return
         path = urls[0].toLocalFile()
         if path:
-            self.try_open_startup_file(path)
+            self.load_file_content(path)
 
 
 def main():
