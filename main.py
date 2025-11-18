@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self.left_pane = QTextEdit()
+        self.left_pane.setAcceptDrops(False)
         self.left_pane.setPlaceholderText("Write your markdown here")
         self.left_pane.textChanged.connect(self.on_text_modified)
         splitter.addWidget(self.left_pane)
