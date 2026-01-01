@@ -126,6 +126,13 @@ def create_menu(self):
     find_action.triggered.connect(self.open_find_replace)
     edit_menu.addAction(find_action)
 
+    view_menu = menubar.addMenu("View")
+    self.toggle_preview_action = QAction("Show Preview", self)
+    self.toggle_preview_action.setCheckable(True)
+    self.toggle_preview_action.setChecked(True)
+    self.toggle_preview_action.triggered.connect(self.toggle_preview_mode)
+    view_menu.addAction(self.toggle_preview_action)
+
 
 def open_file(self):
     """
@@ -195,10 +202,12 @@ class MainWindow(QMainWindow):
         self.save_file = save_file.__get__(self)
         self.save_file_as = save_file_as.__get__(self)
 
+        self.toggle_preview_action = None
         create_menu(self)  
 
         self.current_file_path = None
         self.is_modified = False
+        self.preview_visible = True
 
         central_widget = QWidget()
         layout = QVBoxLayout()
@@ -298,6 +307,8 @@ class MainWindow(QMainWindow):
 
     def update_preview(self):
         md_text = self.left_pane.toPlainText()
+        if not self.right_pane.isVisible():
+            return
         html_content = convert_markdown_to_html(md_text)
         self.right_pane.setHtml(html_content)
 
@@ -315,6 +326,17 @@ class MainWindow(QMainWindow):
         name = self.current_file_path if self.current_file_path else "Untitled"
         mark = "*" if self.is_modified else ""
         self.setWindowTitle(f"{name}{mark} - My PyQt6 QMainWindow")
+
+    def toggle_preview_mode(self, checked=None):
+        show_preview = self.right_pane.isVisible() if checked is None else checked
+        if checked is None:
+            show_preview = not show_preview
+        self.preview_visible = show_preview
+        self.right_pane.setVisible(show_preview)
+        if self.toggle_preview_action:
+            self.toggle_preview_action.setChecked(show_preview)
+        if show_preview:
+            self.update_preview()
 
     def confirm_discard_changes(self):
         if not self.is_modified:
