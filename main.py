@@ -5,14 +5,66 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtWebEngineWidgets import QWebEngineView # type: ignore
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 import sys
 import os
 import json
+import re
 import markdown # type: ignore
 
 
 SESSION_FILE = "session.json"
+
+
+class MarkdownHighlighter(QSyntaxHighlighter):
+    def __init__(self, document):
+        super().__init__(document)
+        self.rules = []
+
+        header_format = QTextCharFormat()
+        header_format.setForeground(QColor("#0366d6"))
+        header_format.setFontWeight(QFont.Weight.Bold)
+        self.rules.append((re.compile(r"^#{1,6}\s.*$", re.MULTILINE), header_format))
+
+        bold_format = QTextCharFormat()
+        bold_format.setFontWeight(QFont.Weight.Bold)
+        self.rules.append((re.compile(r"\*\*[^*]+\*\*"), bold_format))
+        self.rules.append((re.compile(r"__[^_]+__"), bold_format))
+
+        italic_format = QTextCharFormat()
+        italic_format.setFontItalic(True)
+        self.rules.append((re.compile(r"(?<!\*)\*[^*]+\*(?!\*)"), italic_format))
+        self.rules.append((re.compile(r"(?<!_)_[^_]+_(?!_)"), italic_format))
+
+        code_format = QTextCharFormat()
+        code_format.setForeground(QColor("#d73a49"))
+        code_format.setFontFamily("Consolas")
+        self.rules.append((re.compile(r"`[^`]+`"), code_format))
+
+        link_format = QTextCharFormat()
+        link_format.setForeground(QColor("#0366d6"))
+        link_format.setFontUnderline(True)
+        self.rules.append((re.compile(r"\[.*?\]\(.*?\)"), link_format))
+
+        quote_format = QTextCharFormat()
+        quote_format.setForeground(QColor("#6a737d"))
+        self.rules.append((re.compile(r"^>\s.*$", re.MULTILINE), quote_format))
+
+        list_format = QTextCharFormat()
+        list_format.setForeground(QColor("#22863a"))
+        self.rules.append((re.compile(r"^\s*[-*+]\s", re.MULTILINE), list_format))
+        self.rules.append((re.compile(r"^\s*\d+\.\s", re.MULTILINE), list_format))
+
+        fence_format = QTextCharFormat()
+        fence_format.setForeground(QColor("#6f42c1"))
+        self.rules.append((re.compile(r"^```.*$", re.MULTILINE), fence_format))
+
+    def highlightBlock(self, text):
+        for pattern, fmt in self.rules:
+            for match in pattern.finditer(text):
+                start = match.start()
+                length = match.end() - start
+                self.setFormat(start, length, fmt)
 
 
 def convert_markdown_to_html(md_text: str) -> str:
@@ -217,6 +269,7 @@ class MainWindow(QMainWindow):
         self.left_pane.setAcceptDrops(False)
         self.left_pane.setPlaceholderText("Write your markdown here")
         self.left_pane.textChanged.connect(self.on_text_modified)
+        self.highlighter = MarkdownHighlighter(self.left_pane.document())
         splitter.addWidget(self.left_pane)
 
         self.right_pane = QWebEngineView()
