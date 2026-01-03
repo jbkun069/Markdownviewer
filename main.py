@@ -71,7 +71,7 @@ def convert_markdown_to_html(md_text: str) -> str:
     """
     Convert Markdown text to HTML using python's markdown library
     """
-    return markdown.markdown(
+    html = markdown.markdown(
         md_text,
         extensions=[
             "fenced_code",
@@ -82,6 +82,98 @@ def convert_markdown_to_html(md_text: str) -> str:
             "attr_list",
         ]
     )
+    
+    style = """
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+            color: #24292e;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #0366d6;
+            font-weight: bold;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+        h1 { font-size: 2em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        h3 { font-size: 1.25em; }
+        strong { font-weight: bold; }
+        em { font-style: italic; }
+        code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            background-color: #f6f8fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            color: #d73a49;
+            font-size: 85%;
+        }
+        pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow: auto;
+            line-height: 1.45;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #24292e;
+            font-size: 100%;
+        }
+        blockquote {
+            border-left: 0.25em solid #dfe2e5;
+            color: #6a737d;
+            padding: 0 1em;
+            margin: 0 0 16px 0;
+        }
+        a {
+            color: #0366d6;
+            text-decoration: underline;
+        }
+        a:hover {
+            text-decoration: none;
+        }
+        ul, ol {
+            padding-left: 2em;
+            margin-bottom: 16px;
+        }
+        li {
+            margin-bottom: 0.25em;
+            color: #24292e;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+        table th, table td {
+            border: 1px solid #dfe2e5;
+            padding: 6px 13px;
+        }
+        table tr {
+            background-color: #fff;
+            border-top: 1px solid #c6cbd1;
+        }
+        table tr:nth-child(2n) {
+            background-color: #f6f8fa;
+        }
+        table th {
+            font-weight: bold;
+            background-color: #f6f8fa;
+        }
+        hr {
+            border: 0;
+            border-top: 1px solid #dfe2e5;
+            margin: 24px 0;
+        }
+    </style>
+    """
+    return style + html
 
 
 class FindReplaceDialog(QDialog):
