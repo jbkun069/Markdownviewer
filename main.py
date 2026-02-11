@@ -13,12 +13,32 @@ from PyQt6.QtGui import QAction
 
 SESSION_FILE = "session.json"
 
-# This remains a standalone utility function as it doesn't modify class state
+# --- NEW: CSS Styling ---
+CSS_STYLE = """
+<style>
+    body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        padding: 20px; 
+        line-height: 1.6; 
+        color: #24292e;
+    }
+    h1, h2, h3 { border-bottom: 1px solid #eaecef; padding-bottom: .3em; }
+    code { background-color: #f0f0f0; padding: 2px 4px; border-radius: 4px; font-family: Consolas, "Courier New", monospace; }
+    pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
+    blockquote { border-left: 4px solid #dfe2e5; padding-left: 1em; color: #6a737d; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+    th, td { border: 1px solid #dfe2e5; padding: 6px 13px; }
+    tr:nth-child(2n) { background-color: #f6f8fa; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+</style>
+"""
+
 def convert_markdown_to_html(md_text: str) -> str:
     """
     Convert Markdown text to HTML using python's markdown library
     """
-    return markdown.markdown(
+    html_body = markdown.markdown(
         md_text,
         extensions=[
             "fenced_code",
@@ -29,9 +49,11 @@ def convert_markdown_to_html(md_text: str) -> str:
             "attr_list",
         ]
     )
+    # --- NEW: Inject CSS into the final HTML ---
+    return CSS_STYLE + html_body
+
 
 class FindReplaceDialog(QDialog):
-    # (Dialog code remains unchanged)
     def __init__(self, editor):
         super().__init__()
         self.editor = editor
@@ -101,12 +123,8 @@ class MainWindow(QMainWindow):
     def __init__(self, argv):
         super().__init__()
 
-        self.setWindowTitle("My PyQt6 QMainWindow")
+        self.setWindowTitle("Markdown Viewer")
         self.resize(900, 600)
-
-        # ARCHITECTURAL FIX: 
-        # Removed dynamic method binding (e.g., self.open_file = open_file.__get__(self))
-        # Methods are now native to the class.
 
         self.create_menu()  
 
@@ -125,7 +143,8 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.left_pane)
 
         self.right_pane = QWebEngineView()
-        self.right_pane.setHtml("<h2>HTML Preview will appear here</h2>")
+        # --- NEW: Apply CSS to the initial placeholder text ---
+        self.right_pane.setHtml(CSS_STYLE + "<h2>HTML Preview will appear here</h2>")
         splitter.addWidget(self.right_pane)
 
         splitter.setSizes([400, 400])
@@ -140,20 +159,11 @@ class MainWindow(QMainWindow):
 
         self.setAcceptDrops(True)
 
-    # --- MOVED METHODS START ---
-    # These methods were previously outside the class. 
-    # They now have proper access to 'self' without manual binding.
-
     def create_menu(self):
-        """
-        create a simple menu bar
-        """
         menubar = self.menuBar()
-        if menubar is None:
-            return
+        assert menubar is not None
         file_menu = menubar.addMenu("File")
-        if file_menu is None:
-            return
+        assert file_menu is not None
 
         new_action = QAction("New", self)
         new_action.triggered.connect(self.new_file)
@@ -172,15 +182,13 @@ class MainWindow(QMainWindow):
         file_menu.addAction(save_as_action)
 
         edit_menu = menubar.addMenu("Edit")
-        if edit_menu is None:
-            return
+        assert edit_menu is not None
         find_action = QAction("Find / Replace", self)
         find_action.triggered.connect(self.open_find_replace)
         edit_menu.addAction(find_action)
 
         view_menu = menubar.addMenu("View")
-        if view_menu is None:
-            return
+        assert view_menu is not None
         self.toggle_preview_action = QAction("Show Preview", self)
         self.toggle_preview_action.setCheckable(True)
         self.toggle_preview_action.setChecked(True)
@@ -188,9 +196,6 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.toggle_preview_action)
 
     def open_file(self):
-        """
-        Open a file dialog, load markdown content into the editor.
-        """
         if self.is_modified and not self.confirm_discard_changes():
             return
 
@@ -205,10 +210,6 @@ class MainWindow(QMainWindow):
         self.load_file_content(file_path)
 
     def save_file(self):
-        """
-        Save current editor content into the currently opened file.
-        If no file is open, fallback to Save As.
-        """
         if not self.current_file_path:
             return self.save_file_as()
 
@@ -221,9 +222,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save Error", f"Could not save file:\n{self.current_file_path}\n\nError: {e}")
 
     def save_file_as(self):
-        """
-        Save editor content to a new file path chosen by the user.
-        """
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Markdown File",
@@ -240,8 +238,6 @@ class MainWindow(QMainWindow):
             self.update_window_title()
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Could not save file:\n{file_path}\n\nError: {e}")
-
-    # --- MOVED METHODS END ---
 
     def new_file(self):
         if self.is_modified and not self.confirm_discard_changes():
@@ -333,7 +329,7 @@ class MainWindow(QMainWindow):
     def update_window_title(self):
         name = self.current_file_path if self.current_file_path else "Untitled"
         mark = "*" if self.is_modified else ""
-        self.setWindowTitle(f"{name}{mark} - My PyQt6 QMainWindow")
+        self.setWindowTitle(f"{name}{mark} - Markdown Viewer")
 
     def toggle_preview_mode(self, checked=None):
         show_preview = self.right_pane.isVisible() if checked is None else checked
