@@ -7,13 +7,12 @@ from PyQt6.QtWidgets import (
     QSplitter, QTextEdit, QFileDialog, QMessageBox,
     QDialog, QLineEdit, QPushButton, QLabel, QHBoxLayout
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWebEngineWidgets import QWebEngineView # type: ignore
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QTextCursor
 
 SESSION_FILE = "session.json"
 
-# --- NEW: CSS Styling ---
 CSS_STYLE = """
 <style>
     body { 
@@ -35,30 +34,25 @@ CSS_STYLE = """
 """
 
 def convert_markdown_to_html(md_text: str) -> str:
-    """
-    Convert Markdown text to HTML using python's markdown library
-    """
     html_body = markdown.markdown(
         md_text,
         extensions=[
             "fenced_code",
             "tables",
-            "codehilite",
+            "codehilite", # Requires pygments to be installed
             "toc",
             "abbr",
             "attr_list",
         ]
     )
-    # --- NEW: Inject CSS into the final HTML ---
     return CSS_STYLE + html_body
-
 
 class FindReplaceDialog(QDialog):
     def __init__(self, editor):
         super().__init__()
         self.editor = editor
         self.setWindowTitle("Find / Replace")
-        self.setModal(True)
+        self.setModal(False) # Non-modal so user can edit while searching
 
         self.find_input = QLineEdit()
         self.replace_input = QLineEdit()
@@ -93,30 +87,37 @@ class FindReplaceDialog(QDialog):
         text = self.find_input.text()
         if not text:
             return
-        cursor = self.editor.textCursor()
-        start = cursor.position()
-        doc = self.editor.document()
-        found = doc.find(text, start)
-        if not found.isNull():
-            self.editor.setTextCursor(found)
-        else:
-            found = doc.find(text, 0)
-            if not found.isNull():
-                self.editor.setTextCursor(found)
+        
+        found = self.editor.find(text)
+        if not found:
+            cursor = self.editor.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            self.editor.setTextCursor(cursor)
+            self.editor.find(text)
 
     def replace_one(self):
-        t = self.find_input.text()
-        r = self.replace_input.text()
         cursor = self.editor.textCursor()
-        if cursor.selectedText() == t:
-            cursor.insertText(r)
-        self.find_next()
+        if cursor.hasSelection() and cursor.selectedText() == self.find_input.text():
+            cursor.insertText(self.replace_input.text())
+            self.find_next()
+        else:
+            self.find_next()
 
     def replace_all(self):
-        t = self.find_input.text()
-        r = self.replace_input.text()
-        text = self.editor.toPlainText().replace(t, r)
-        self.editor.setPlainText(text)
+        target = self.find_input.text()
+        replacement = self.replace_input.text()
+        if not target:
+            return
+
+        cursor = self.editor.textCursor()
+        cursor.beginEditBlock() 
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        self.editor.setTextCursor(cursor)
+        
+        while self.editor.find(target):
+            self.editor.textCursor().insertText(replacement)
+            
+        cursor.endEditBlock()
 
 
 class MainWindow(QMainWindow):
@@ -126,11 +127,17 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Markdown Viewer")
         self.resize(900, 600)
 
-        self.create_menu()  
-
         self.current_file_path = None
         self.is_modified = False
         self.preview_visible = True
+        
+        # Debounce Timer for performance
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.setInterval(300) 
+        self.debounce_timer.timeout.connect(self.update_preview)
+
+        self.create_menu()  
 
         central_widget = QWidget()
         layout = QVBoxLayout()
@@ -143,11 +150,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.left_pane)
 
         self.right_pane = QWebEngineView()
-        # --- NEW: Apply CSS to the initial placeholder text ---
         self.right_pane.setHtml(CSS_STYLE + "<h2>HTML Preview will appear here</h2>")
         splitter.addWidget(self.right_pane)
 
-        splitter.setSizes([400, 400])
+        splitter.setSizes([450, 450])
         layout.addWidget(splitter)
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
@@ -166,24 +172,29 @@ class MainWindow(QMainWindow):
         assert file_menu is not None
 
         new_action = QAction("New", self)
+        new_action.setShortcut("Ctrl+N")
         new_action.triggered.connect(self.new_file)
         file_menu.addAction(new_action)
 
         open_action = QAction("Open", self)
+        open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
         save_action = QAction("Save", self)
+        save_action.setShortcut("Ctrl+S")
         save_action.triggered.connect(self.save_file)
         file_menu.addAction(save_action)
 
         save_as_action = QAction("Save As", self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
         save_as_action.triggered.connect(self.save_file_as)
         file_menu.addAction(save_as_action)
 
         edit_menu = menubar.addMenu("Edit")
         assert edit_menu is not None
         find_action = QAction("Find / Replace", self)
+        find_action.setShortcut("Ctrl+F")
         find_action.triggered.connect(self.open_find_replace)
         edit_menu.addAction(find_action)
 
@@ -192,8 +203,20 @@ class MainWindow(QMainWindow):
         self.toggle_preview_action = QAction("Show Preview", self)
         self.toggle_preview_action.setCheckable(True)
         self.toggle_preview_action.setChecked(True)
+        self.toggle_preview_action.setShortcut("Ctrl+P")
         self.toggle_preview_action.triggered.connect(self.toggle_preview_mode)
         view_menu.addAction(self.toggle_preview_action)
+
+    def new_file(self):
+        if self.is_modified and not self.confirm_discard_changes():
+            return
+        self.left_pane.blockSignals(True)
+        self.left_pane.setPlainText("")
+        self.left_pane.blockSignals(False)
+        self.current_file_path = None
+        self.is_modified = False
+        self.update_window_title()
+        self.update_preview()
 
     def open_file(self):
         if self.is_modified and not self.confirm_discard_changes():
@@ -208,6 +231,29 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
         self.load_file_content(file_path)
+
+    def load_file_content(self, path):
+        content = None
+        err = None
+        for enc in ["utf-8", "utf-16", "latin-1"]:
+            try:
+                with open(path, "r", encoding=enc) as f:
+                    content = f.read()
+                    break
+            except Exception as e:
+                err = e
+                continue
+        if content is None:
+            QMessageBox.critical(self, "File Read Error", f"Failed to read file:\n{path}\n\nError: {err}")
+            return
+            
+        self.left_pane.blockSignals(True)
+        self.left_pane.setPlainText(content)
+        self.left_pane.blockSignals(False)
+        self.current_file_path = path
+        self.is_modified = False
+        self.update_window_title()
+        self.update_preview()
 
     def save_file(self):
         if not self.current_file_path:
@@ -239,40 +285,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Could not save file:\n{file_path}\n\nError: {e}")
 
-    def new_file(self):
-        if self.is_modified and not self.confirm_discard_changes():
-            return
-        self.left_pane.blockSignals(True)
-        self.left_pane.setPlainText("")
-        self.left_pane.blockSignals(False)
-        self.current_file_path = None
-        self.is_modified = False
-        self.update_window_title()
-        self.update_preview()
-
-    def load_file_content(self, path):
-        encodings = ["utf-8", "utf-16", "latin-1"]
-        content = None
-        err = None
-        for enc in encodings:
-            try:
-                with open(path, "r", encoding=enc) as f:
-                    content = f.read()
-                    break
-            except Exception as e:
-                err = e
-                continue
-        if content is None:
-            QMessageBox.critical(self, "File Read Error", f"Failed to read file:\n{path}\n\nError: {err}")
-            return
-        self.left_pane.blockSignals(True)
-        self.left_pane.setPlainText(content)
-        self.left_pane.blockSignals(False)
-        self.current_file_path = path
-        self.is_modified = False
-        self.update_window_title()
-        self.update_preview()
-
     def try_open_startup_file(self, path):
         if os.path.exists(path):
             self.load_file_content(path)
@@ -283,18 +295,20 @@ class MainWindow(QMainWindow):
         try:
             with open(SESSION_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except:
+        except (OSError, json.JSONDecodeError):
             return
+            
         last_path = data.get("last_file")
         last_text = data.get("last_text")
+        
         if last_path and os.path.exists(last_path):
             self.load_file_content(last_path)
-        else:
+        elif last_text:
             self.left_pane.blockSignals(True)
-            self.left_pane.setPlainText(last_text or "")
+            self.left_pane.setPlainText(last_text)
             self.left_pane.blockSignals(False)
             self.current_file_path = None
-            self.is_modified = False
+            self.is_modified = True 
             self.update_window_title()
             self.update_preview()
 
@@ -306,7 +320,7 @@ class MainWindow(QMainWindow):
         try:
             with open(SESSION_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f)
-        except:
+        except OSError:
             pass
 
     def update_preview(self):
@@ -317,17 +331,17 @@ class MainWindow(QMainWindow):
         self.right_pane.setHtml(html_content)
 
     def open_find_replace(self):
-        dlg = FindReplaceDialog(self.left_pane)
-        dlg.exec()
+        self.find_dialog = FindReplaceDialog(self.left_pane)
+        self.find_dialog.show()
 
     def on_text_modified(self):
         if not self.is_modified:
             self.is_modified = True
             self.update_window_title()
-        self.update_preview()
+        self.debounce_timer.start()
 
     def update_window_title(self):
-        name = self.current_file_path if self.current_file_path else "Untitled"
+        name = os.path.basename(self.current_file_path) if self.current_file_path else "Untitled"
         mark = "*" if self.is_modified else ""
         self.setWindowTitle(f"{name}{mark} - Markdown Viewer")
 
@@ -370,6 +384,8 @@ class MainWindow(QMainWindow):
             return
         path = urls[0].toLocalFile()
         if path:
+            if self.is_modified and not self.confirm_discard_changes():
+                return
             self.load_file_content(path)
 
 
