@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
 SESSION_FILE = "session.json"
 DEFAULT_TITLE = "Markdown Viewer"
 
-# Standard CSS for the preview
 CSS_STYLE = """
 <style>
     body { 
@@ -91,14 +90,13 @@ class FindReplaceDialog(QDialog):
         replacement = self.replace_input.text()
         if not target: return
 
-        # Perform replacement on the document directly, not the visible cursor
         doc = self.editor.document()
         cursor = QTextCursor(doc)
         cursor.beginEditBlock()
         
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         while True:
-            # Search from current position
+    
             found_cursor = doc.find(target, cursor)
             if found_cursor.isNull():
                 break
@@ -129,7 +127,6 @@ class MainWindow(QMainWindow):
         self.left_pane.textChanged.connect(self.on_text_modified)
         
         self.right_pane = QWebEngineView()
-        # Initial load with empty body and CSS
         self.right_pane.setHtml(f"<html><head>{CSS_STYLE}</head><body><div id='content'></div></body></html>")
 
         splitter.addWidget(self.left_pane)
@@ -160,10 +157,9 @@ class MainWindow(QMainWindow):
         if not self.right_pane.isVisible(): return
         
         raw_html = convert_markdown_to_html(self.left_pane.toPlainText())
-        # Clean up HTML for JS safety
+        
         safe_html = raw_html.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
         
-        # Inject only the content into the div, keeping scroll intact
         js = f"document.getElementById('content').innerHTML = `{safe_html}`;"
         self.right_pane.page().runJavaScript(js)
 
@@ -181,7 +177,6 @@ class MainWindow(QMainWindow):
             self.update_window_title()
         self.debounce_timer.start()
 
-    # --- Standard Boilerplate (New, Open, Save, etc.) ---
     def load_initial_content(self, argv):
         if os.path.exists(SESSION_FILE): self.restore_last_session()
         elif len(argv) > 1: self.load_file_content(argv[1])
