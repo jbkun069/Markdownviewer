@@ -1,23 +1,26 @@
 # Markdown Viewer
 
-A lightweight, desktop Markdown editor and previewer built with PyQt6.
+A lightweight, cross-platform desktop Markdown editor and previewer built with PyQt6.
 
 ## Features
 
-- **Live Preview** - See your Markdown rendered as HTML in real-time
-- **Split View** - Markdown text on the left, preview on the right
-- **Find & Replace** - Search and replace text within your documents
-- **Session Restore** - Automatically restores your last session on startup
-- **Drag & Drop** - Drop Markdown files directly into the editor
+- **Live Preview**: See your Markdown rendered as HTML in real-time as you type.
+- **Split View**: A convenient side-by-side view with the Markdown text on the left and the rendered HTML preview on the right.
+- **Syntax Highlighting**: Code blocks are highlighted for better readability.
+- **Find & Replace**: Quickly search for and replace text within your documents.
+- **Session Restore**: Automatically re-opens the files and tabs from your last session on startup.
+- **Drag & Drop**: Easily open Markdown files by dragging and dropping them into the editor window.
 
 ## Supported Markdown Extensions
 
-- Fenced code blocks
-- Tables
-- Code highlighting
-- Table of contents
-- Abbreviations
-- Attribute lists
+This editor uses the [Python-Markdown](https://python-markdown.github.io/) library and supports several extensions out of the box:
+
+- Fenced code blocks (`fenced_code`)
+- Tables (`tables`)
+- Code highlighting (`codehilite`)
+- Table of contents (`toc`)
+- Abbreviations (`abbr`)
+- Attribute lists (`attr_list`)
 
 ## Installation
 
@@ -26,10 +29,12 @@ A lightweight, desktop Markdown editor and previewer built with PyQt6.
 - Python 3.8+
 - pip
 
-### Install Dependencies
+### Install from `requirements.txt`
+
+install it using:
 
 ```bash
-pip install PyQt6 PyQt6-WebEngine markdown
+pip install -r requirements.txt
 ```
 
 ### Run the Application
